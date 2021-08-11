@@ -35,6 +35,11 @@ let match_char chr =
     | ']' -> End_while
     | _ -> Nothing
 
+let get_state_index (stt:state) =
+    match stt with
+    | None -> raise (Failure "state should not be none")
+    | Some a -> !a.mem_ptr
+
 let action (expression:expr) =
     match expression with
     | Mv_ptr_r -> print_endline "moving right"
@@ -47,6 +52,18 @@ let action (expression:expr) =
     | Save_char -> print_endline "save char"
     | Nothing -> print_endline "nothing"
 
+let interpret (this_state:state) (mem:bytes) (expression:expr) =
+    let this_index = get_state_index this_state in
+    match expression with
+    | Mv_ptr_r -> move_ptr_right this_state
+    | Mv_ptr_l -> move_ptr_left this_state
+    | Incr_val -> increase mem this_index
+    | Decr_val -> decrease mem this_index
+    | Beg_while -> print_endline "beg while"
+    | End_while -> print_endline "end while"
+    | Print_char -> print_mem mem this_index 
+    | Save_char -> print_endline "save char"
+    | Nothing -> print_endline "nothing"
 
 let unbox_expr (tkn:token) : expr =
     match tkn with
@@ -64,11 +81,12 @@ let increase mem index = (Bytes.get_uint8 mem index + 1) |> Bytes.set_uint8 mem 
 
 let decrease mem index = (Bytes.get_uint8 mem index - 1) |> Bytes.set_uint8 mem index
 
-let print_mem mem index = print_char (Bytes.get mem index) 
+let print_mem mem index = print_endline (Bytes.get mem index) 
 
 let save_char mem index = (Bytes.set mem index (input_char stdin))
 
-let move_ptr_right (this_state: state) = function
+let move_ptr_right (this_state: state) =
+    match this_state with
     | None -> ()
     | Some this_record ->
             let index = !this_record.mem_ptr in
@@ -79,7 +97,8 @@ let move_ptr_right (this_state: state) = function
                     else (index + 1)
             }
 
-let move_ptr_left (this_state: state) = function
+let move_ptr_left (this_state: state) = 
+    match this_state with
     | None -> ()
     | Some this_record ->
             let index = (!this_record.mem_ptr) in
@@ -89,7 +108,8 @@ let move_ptr_left (this_state: state) = function
                     then 30_000 else (index - 1)
             }
 
-let change_loop_state (this_state: state) = function
+let change_loop_state (this_state: state) =
+    match this_state with
     | None -> ()
     | Some this_record ->
             let truth_val = (!this_record.on_loop) in 
@@ -153,6 +173,5 @@ let main =
         nested_state = None;
     }) in
     
-    let fuck tkn = action (unbox_expr tkn) in
-    List.map (fun tkn -> fuck tkn) tokens
-    ()
+    let act tkn = interpret this_state mem (unbox_expr tkn) in
+    List.map interpret tokens
