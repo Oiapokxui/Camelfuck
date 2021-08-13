@@ -1,7 +1,7 @@
 type state = 
     | None
     | Some of (state_rec ref) and state_rec = {
-        mem_ptr:int;
+        mem_ptr: int;
         start_loop: int option;
         end_loop: int option;
         on_loop: bool
@@ -143,7 +143,7 @@ let end_loop_if_possible (states: state list) (mem: bytes) =
     | [] -> []
     | loop_state::states_tail ->
             if (is_mem_ptr_zero loop_state mem)
-            then ((); states_tail)
+            then states_tail
             else states
 
 let interpret (states_stack:state list) (mem:bytes) (expression:expr) : state list =
@@ -172,9 +172,7 @@ let rec interpret_from_list
                 let new_states_queue = interpret states_queue mem (unbox_expr token) in
                 interpret_from_list new_states_queue mem expr_tail
 
-let tuple_tokenize parsed_list : token list = List.map (fun el -> match_expr el) parsed_list
-
-let tokenize parsed_list = List.map (fun el -> match_char el) parsed_list
+let tokenize parsed_list : token list = List.map (fun el -> match_expr el) parsed_list
 
 let push_to_queue (token_list: token list) = 
     let rec push_to_queue_helper (tkn_lst: token list) (queue: token Queue.t) =
@@ -229,13 +227,14 @@ let rec parse file lst =
     with
     | _ -> lst
 
-let rec tokenize file index lst = 
+let rec enumerate file index lst = 
     try 
-        tokenize file (index + 1) (((input_char file), index)::lst)
+        let next_tuple = ((input_char file), index) in
+        enumerate file (index + 1) (next_tuple::lst)
     with
     | _ -> lst
 
-let tokenize_file filename = tokenize (open_in filename) 0 []
+let enumerate_file filename = enumerate (open_in filename) 0 []
 
 let list_length lst = List.fold_right (fun elem accum -> accum + 1) lst 0
 
@@ -287,7 +286,7 @@ let main =
 
     let mem = Bytes.create 30_000 in 
 
-    let tokens = tokenize_file name |> List.rev |> tuple_tokenize in
+    let tokens = enumerate_file name |> List.rev |> tokenize in
 
     let pairs = get_while_pair_expressions tokens in
 
