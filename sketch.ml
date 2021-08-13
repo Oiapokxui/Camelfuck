@@ -1,3 +1,12 @@
+type state = 
+    | None
+    | Some of (state_rec ref) and state_rec = {
+        mem_ptr:int;
+        start_loop: int option;
+        end_loop: int option;
+        on_loop: bool
+    } 
+
 type expr = 
     | Mv_ptr_r 
     | Mv_ptr_l 
@@ -9,19 +18,12 @@ type expr =
     | Save_char
     | Nothing
 
-type state = 
-    | None
-    | Some of (state_rec ref) and state_rec = {
-        mem_ptr:int;
-        on_loop:bool;
-        start_loop:int;
-        end_loop:int;
-        nested_state:state;
-    } 
+type token = (expr * int)
 
-type token = 
-    | Expr of expr 
-    | TokenTuple of (expr * int)
+type statement =
+    | Sequence of statement list
+    | While of statement
+    | Expression of token
 
 let match_char chr = 
     match chr with
@@ -35,11 +37,6 @@ let match_char chr =
     | ']' -> End_while
     | _ -> Nothing
 
-let get_state_index (stt:state) =
-    match stt with
-    | None -> raise (Failure "state should not be none")
-    | Some a -> !a.mem_ptr
-
 let action (expression:expr) =
     match expression with
     | Mv_ptr_r -> print_endline "moving right"
@@ -52,36 +49,34 @@ let action (expression:expr) =
     | Save_char -> print_endline "save char"
     | Nothing -> print_endline "nothing"
 
-let interpret (this_state:state) (mem:bytes) (expression:expr) =
-    let this_index = get_state_index this_state in
-    match expression with
-    | Mv_ptr_r -> move_ptr_right this_state
-    | Mv_ptr_l -> move_ptr_left this_state
-    | Incr_val -> increase mem this_index
-    | Decr_val -> decrease mem this_index
-    | Beg_while -> print_endline "beg while"
-    | End_while -> print_endline "end while"
-    | Print_char -> print_mem mem this_index 
-    | Save_char -> print_endline "save char"
-    | Nothing -> print_endline "nothing"
+let get_state_index (stt:state) =
+    match stt with
+    | None -> raise (Failure "get_state_index: State should not be none")
+    | Some a -> !a.mem_ptr
+
+let get_state_index (stt:state) =
+    match stt with
+    | None -> raise (Failure "get_state_index: State should not be none")
+    | Some record -> 
+            match !record.start_loop with
+            | None -> raise (Failure "get_state_index: on_loop field of state is None")
+            | Some num -> num
 
 let unbox_expr (tkn:token) : expr =
     match tkn with
-    | TokenTuple (exp, ind) -> exp
-    | Expr exp -> exp
+    | (exp, ind) -> exp
 
-let unbox_index (tkn:token) : (int option) = 
+let unbox_index (tkn:token) : int = 
     match tkn with
-    | TokenTuple (exp, ind) -> Some ind
-    | Expr exp -> None
+    | (exp, ind) -> ind
 
-let match_expr ((to_token:char), (i:int)) = TokenTuple (match_char to_token, i)
+let match_expr ((to_token:char), (i:int)) = (match_char to_token, i)
 
 let increase mem index = (Bytes.get_uint8 mem index + 1) |> Bytes.set_uint8 mem index
 
 let decrease mem index = (Bytes.get_uint8 mem index - 1) |> Bytes.set_uint8 mem index
 
-let print_mem mem index = print_endline (Bytes.get mem index) 
+let print_mem mem index = print_char (Bytes.get mem index) 
 
 let save_char mem index = (Bytes.set mem index (input_char stdin))
 
@@ -91,7 +86,8 @@ let move_ptr_right (this_state: state) =
     | Some this_record ->
             let index = !this_record.mem_ptr in
             this_record := {
-                !this_record with mem_ptr =
+                !this_record with 
+                mem_ptr =
                     if (index = 30_000)
                     then 0 
                     else (index + 1)
@@ -103,10 +99,16 @@ let move_ptr_left (this_state: state) =
     | Some this_record ->
             let index = (!this_record.mem_ptr) in
             this_record := {
-                !this_record with mem_ptr =
+                !this_record with 
+                mem_ptr =
                     if (index = 0)
                     then 30_000 else (index - 1)
             }
+
+let is_mem_ptr_zero (this_state: state) (mem: bytes) =
+    match this_state with
+    | None -> raise (Failure ("is_mem_ptr_zero : cannot access None state"))
+    | Some s -> (Bytes.get_uint8 mem (!s.mem_ptr) = 0)
 
 let change_loop_state (this_state: state) =
     match this_state with
@@ -116,17 +118,110 @@ let change_loop_state (this_state: state) =
             let index = 
                 if not truth_val 
                 then (!this_record.mem_ptr) 
-                else (!this_record.start_loop) 
+                else (get_state_index this_state) 
             in
             this_record := { 
                 !this_record with 
                 on_loop = not truth_val ; 
-                start_loop = index 
+                start_loop = Some index 
             }
+
+let begin_loop_state (this_state: state) (end_while_pos: int) =
+    match this_state with
+    | None -> None
+    | Some this_record ->
+            let index = (!this_record.start_loop) in
+            Some (ref { 
+                !this_record with 
+                on_loop = true ; 
+                start_loop = index ;
+                end_loop = Some end_while_pos
+            })
+
+let end_loop_if_possible (states: state list) (mem: bytes) = 
+    match states with
+    | [] -> []
+    | loop_state::states_tail ->
+            if (is_mem_ptr_zero loop_state mem)
+            then ((); states_tail)
+            else states
+
+let interpret (states_stack:state list) (mem:bytes) (expression:expr) : state list =
+    match states_stack with
+    | [] -> raise (Failure "interpret: Cannot interpret with states_stack empty")
+    | this_state :: stack_tail ->
+        let this_index = get_state_index this_state in
+        match expression with
+        | Mv_ptr_r -> move_ptr_right this_state ; states_stack
+        | Mv_ptr_l -> move_ptr_left this_state ; states_stack
+        | Incr_val -> increase mem this_index ; states_stack
+        | Decr_val -> decrease mem this_index ; states_stack
+        | Beg_while -> print_endline "beg while" ; states_stack
+        | End_while -> print_endline "end while" ; states_stack 
+        | Print_char -> print_mem mem this_index ; states_stack
+        | Save_char -> print_endline "save char" ; states_stack
+        | Nothing -> print_endline "nothing" ; states_stack
+
+let rec interpret_from_list 
+    (states_queue:state list) 
+    (mem:bytes) 
+    (expression_list: token list) =
+        match expression_list with
+        | [] -> ()
+        | token::expr_tail -> 
+                let new_states_queue = interpret states_queue mem (unbox_expr token) in
+                interpret_from_list new_states_queue mem expr_tail
 
 let tuple_tokenize parsed_list : token list = List.map (fun el -> match_expr el) parsed_list
 
 let tokenize parsed_list = List.map (fun el -> match_char el) parsed_list
+
+let push_to_queue (token_list: token list) = 
+    let rec push_to_queue_helper (tkn_lst: token list) (queue: token Queue.t) =
+       match tkn_lst with
+       | [] -> ()
+       | tkn :: list_tail -> 
+               Queue.add tkn queue ; 
+               push_to_queue_helper list_tail queue 
+    in
+    let token_queue = Queue.create () in
+    push_to_queue_helper token_list token_queue;
+    token_queue
+
+let rec statement_to_list (stmt: statement) : statement list =
+    match stmt with
+    | Expression expr -> [stmt]
+    | Sequence seq -> seq
+    | While while_stmt -> statement_to_list while_stmt 
+
+let add_to_first_stmt (stmt_to_add:statement) (stmt_list:statement list) : statement list=
+    match stmt_list with
+    | [] ->  [stmt_to_add]
+    | first :: stmt_list_tail -> 
+            match first with
+            | While _ -> stmt_to_add :: stmt_list
+            | _ ->
+                    let first_as_list = statement_to_list first in 
+                    (Sequence (first_as_list @ [stmt_to_add]) ) :: stmt_list_tail
+
+let rec parse_syntax_helper (token_queue: token Queue.t) (stmts: statement list) : statement = 
+    if Queue.is_empty token_queue
+    then Sequence (List.rev stmts)
+    else 
+        let tkn :token = Queue.take token_queue in
+        match (unbox_expr tkn) with
+        | End_while -> Sequence (List.rev stmts)
+        | Beg_while -> 
+                let while_stmt = 
+                    While (parse_syntax_helper token_queue [])
+                in
+                parse_syntax_helper token_queue (while_stmt::stmts)
+        | Nothing -> parse_syntax_helper token_queue stmts
+        | _ -> parse_syntax_helper token_queue (add_to_first_stmt (Expression tkn) stmts)
+
+let parse_syntax (token_list: token list) = 
+    let token_queue : token Queue.t = push_to_queue token_list in
+    parse_syntax_helper token_queue []
 
 let rec parse file lst = 
     try 
@@ -134,44 +229,78 @@ let rec parse file lst =
     with
     | _ -> lst
 
-let rec parse_enumerate file index lst = 
+let rec tokenize file index lst = 
     try 
-        parse_enumerate file (index + 1) (((input_char file), index)::lst)
+        tokenize file (index + 1) (((input_char file), index)::lst)
     with
     | _ -> lst
 
-let parse_enumerate_filename filename = parse_enumerate (open_in filename) 0 []
+let tokenize_file filename = tokenize (open_in filename) 0 []
 
 let list_length lst = List.fold_right (fun elem accum -> accum + 1) lst 0
 
-let filter_char (token_list:token list) (f_expr:expr) : token list = List.filter (fun tkn -> unbox_expr tkn |> (fun expr -> expr = f_expr)) token_list  
+let filter_expr (token_list:token list) (f_expr:expr) : token list = 
+    List.filter (fun tkn -> unbox_expr tkn |> (fun expr -> expr = f_expr)) token_list  
 
-let filter_opening_brackets (token_list:token list) : token list = filter_char token_list Beg_while
+let filter_opening_brackets (token_list:token list) : token list = filter_expr token_list Beg_while
 
-let filter_closing_brackets (token_list:token list) : token list = filter_char token_list End_while
+let filter_closing_brackets (token_list:token list) : token list = filter_expr token_list End_while
 
 let check_syntax (token_list:token list) = 
-    let bool_val =  list_length (filter_opening_brackets token_list) = list_length (filter_closing_brackets token_list)  in
-    match bool_val with
+    match
+        list_length (filter_opening_brackets token_list) = list_length (filter_closing_brackets token_list)  
+    with
     | true -> ()
     | false -> raise (Failure "Number of Opening and Closing Brackets do not match")
 
+let rec pair_loop_expressions 
+    (token_list:token list) 
+    (beg_while_stack: token list) 
+    (pair_list: (token * token) list) : (token * token) list =
+        match token_list with
+        | [] -> pair_list
+        | tkn::list_tail -> 
+                let expression = unbox_expr tkn in
+                let index = string_of_int (unbox_index tkn) in
+
+                if expression = Beg_while
+                then (pair_loop_expressions list_tail (tkn::beg_while_stack) pair_list)
+
+                else if expression = End_while
+                then
+                    match beg_while_stack with
+                    | [] -> raise (
+                                Failure ("Dangling End_while expression at position: " ^ index)
+                            )
+                    | matching_token::stack_tail -> 
+                            pair_loop_expressions 
+                                list_tail 
+                                stack_tail 
+                                ((matching_token, tkn)::pair_list)
+
+                else pair_loop_expressions list_tail beg_while_stack pair_list
+
+let get_while_pair_expressions (token_list:token list) = pair_loop_expressions token_list [] [] 
+
 let main = 
-    let name = "helloworld.bf" in
+    let name = "mybf.bf" in
 
     let mem = Bytes.create 30_000 in 
 
-    let tokens = parse_enumerate_filename name |> List.rev |> tuple_tokenize in
+    let tokens = tokenize_file name |> List.rev |> tuple_tokenize in
+
+    let pairs = get_while_pair_expressions tokens in
 
     let _ = check_syntax tokens in 
-     
+    (* 
     let this_state = Some (ref {
         mem_ptr      = 0;
         on_loop      = false;
-        start_loop   = 0;
-        end_loop     = 0;
-        nested_state = None;
+        start_loop   = Some 0;
+        end_loop     = Some 0;
     }) in
     
-    let act tkn = interpret this_state mem (unbox_expr tkn) in
-    List.map interpret tokens
+    let act tkn = interpret [this_state] mem (unbox_expr tkn) in
+    List.map act tokens;
+    *)
+    parse_syntax tokens
