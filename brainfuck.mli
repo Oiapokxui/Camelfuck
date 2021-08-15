@@ -33,6 +33,8 @@ val get_token_index : token -> int
 
 val match_expr : char * int -> expr * int
 
+val mem_size : int
+
 val increase : bytes -> int -> unit
 
 val decrease : bytes -> int -> unit
