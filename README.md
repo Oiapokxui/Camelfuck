@@ -45,7 +45,7 @@ ocamlbuild brainfuck.ml
 
 Those are brainfuck programs to test the interpreter with:
 
-- ```ola_mundo.bf```: Prints a hello world in brazilian portuguese after some input is typed in. 
+- ```ola_mundo.bf```: Prints a hello world in brazilian portuguese then waits for an input to terminate. 
 - ```hello_world.bf```: Your run-in-the-mill hello world program
 - ```input_as_bf_file.bf```: Takes a 0-terminated char stream and outputs a brainfuck program that
 would print it. Taken from the [brainfuck archive](http://esoteric.sange.fi/brainfuck)
