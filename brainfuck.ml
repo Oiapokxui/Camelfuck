@@ -77,10 +77,20 @@ let print_mem mem index =
                 "print_mem: index " 
                 ^ (string_of_int index) ^ " is not within range of 0 to " 
                 ^ (string_of_int mem_size)
-            )
+            );
+            flush stdout
+
 
 let save_char mem index = 
-    try (Bytes.set mem index (input_char stdin)) with
+    try 
+        let input = read_line () in
+        let in_char = 
+            if String.equal input "" 
+            then '\010'
+            else input.[0]
+        in
+        Bytes.set mem index in_char 
+    with
     | End_of_file -> 
             print_endline "save_char: standard input is empty";
     | Invalid_argument _ ->
