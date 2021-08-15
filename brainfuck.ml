@@ -33,9 +33,9 @@ let match_char chr =
     | ']' -> End_while
     | _ -> Nothing
 
-let get_state_index (stt:state) = !stt.mem_ptr
+let get_state_index stt = !stt.mem_ptr
 
-let create_state (u:unit) = ref {
+let create_state: unit -> state  = fun u -> ref {
         mem_ptr      = 0;
         on_loop      = false;
     }
@@ -50,20 +50,52 @@ let get_token_index (tkn:token) : int =
 
 let match_expr (to_token, i) = (match_char to_token, i)
 
-let increase mem index = (Bytes.get_uint8 mem index + 1) |> Bytes.set_uint8 mem index
+let mem_size = 30_000
 
-let decrease mem index = (Bytes.get_uint8 mem index - 1) |> Bytes.set_uint8 mem index
+let increase mem index = 
+    try ((Bytes.get_uint8 mem index + 1) |> Bytes.set_uint8 mem index) with
+    | Invalid_argument _ ->
+            print_endline (
+                "increase: index " 
+                ^ (string_of_int index) ^ " is not within range of 0 to " 
+                ^ (string_of_int mem_size)
+            )
 
-let print_mem mem index = print_char( Bytes.get mem index)
+let decrease mem index = 
+    try (Bytes.get_uint8 mem index - 1) |> Bytes.set_uint8 mem index with
+    | Invalid_argument _ ->
+            print_endline (
+                "decrease: index " 
+                ^ (string_of_int index) ^ " is not within range of 0 to " 
+                ^ (string_of_int mem_size)
+            )
 
-let save_char mem index = (Bytes.set mem index (input_char stdin))
+let print_mem mem index = 
+    try print_char( Bytes.get mem index ) with
+    | Invalid_argument _ -> 
+            print_endline (
+                "print_mem: index " 
+                ^ (string_of_int index) ^ " is not within range of 0 to " 
+                ^ (string_of_int mem_size)
+            )
+
+let save_char mem index = 
+    try (Bytes.set mem index (input_char stdin)) with
+    | End_of_file -> 
+            print_endline "save_char: standard input is empty";
+    | Invalid_argument _ ->
+            print_endline (
+                "save_char: index " 
+                ^ (string_of_int index) ^ " is not within range of 0 to " 
+                ^ (string_of_int mem_size)
+            )
 
 let move_ptr_right this_state =
     let index = !this_state.mem_ptr in
     this_state := {
         !this_state with 
         mem_ptr =
-            if (index = 30_000)
+            if (index = mem_size)
             then 0 
             else (index + 1)
     }
@@ -74,7 +106,8 @@ let move_ptr_left this_state =
         !this_state with 
         mem_ptr =
             if (index = 0)
-            then 30_000 else (index - 1)
+            then mem_size 
+            else (index - 1)
     }
 
 let is_mem_of_ptr_zero this_state mem =
@@ -99,7 +132,7 @@ let execute_expression states_stack mem expression =
         | Mv_ptr_l -> move_ptr_left this_state 
         | Incr_val -> increase mem this_index 
         | Decr_val -> decrease mem this_index 
-        | Print_char -> print_mem mem this_index 
+        | Print_char -> print_mem mem this_index
         | Save_char -> save_char mem this_index 
         | Beg_while -> ()
         | End_while -> ()
@@ -238,9 +271,15 @@ let rec interpret (states_stack : state) (mem: bytes) (a_stmt:statement) =
             done 
 
 let main = 
-    let name = "bloody_stupid_testing.bf" in
+    let arguments = Sys.argv in
 
-    let mem = Bytes.create 30_000 in 
+    let name = 
+        if (Array.length arguments > 1) 
+        then Array.get arguments 1 
+        else failwith "No file name string recieved as string"
+    in 
+
+    let mem = Bytes.create mem_size in 
 
     let tokens = read_enumerate_file name |> List.rev |> tokenize_parsed_list in
 
@@ -254,4 +293,4 @@ let main =
 
     interpret this_state mem program;
 
-    print_endline ""
+    print_newline ()
