@@ -1,3 +1,26 @@
+type state = (state_rec ref) and state_rec = {
+        mem_ptr: int;
+        on_loop: bool
+    } 
+
+type expr = 
+    | Mv_ptr_r 
+    | Mv_ptr_l 
+    | Incr_val 
+    | Decr_val 
+    | Beg_while 
+    | End_while 
+    | Print_char
+    | Save_char
+    | Nothing
+
+type token = (expr * int)
+
+type statement =
+    | Sequence of statement list
+    | While of statement
+    | Expression of token
+
 val match_char : char -> expr
 
 val get_state_index : state -> int
@@ -22,9 +45,7 @@ val move_ptr_right : state -> unit
 
 val move_ptr_left : state -> unit
 
-val is_mem_of_ptr_zero : state -> -> bytes -> bool
-
-val change_loop_state : state -> unit
+val is_mem_of_ptr_zero : state -> bytes -> bool
 
 val begin_loop_state : state -> state
 
@@ -42,9 +63,9 @@ val create_queue_from_token_list : token list -> token Queue.t
 
 val parse_syntax : token list -> statement
 
-val read_file :  in_channel -> int -> char list
+val read_file :  in_channel -> char list -> char list
 
-val enumerate : in_channel -> int -> (char * int) list
+val enumerate : in_channel -> int -> (char * int) list -> (char * int) list
 
 val read_enumerate_file : string -> (char * int) list
 

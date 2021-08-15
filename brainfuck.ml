@@ -238,7 +238,7 @@ let rec interpret (states_stack : state) (mem: bytes) (a_stmt:statement) =
             done 
 
 let main = 
-    let name = "olamundo.bf" in
+    let name = "bloody_stupid_testing.bf" in
 
     let mem = Bytes.create 30_000 in 
 
