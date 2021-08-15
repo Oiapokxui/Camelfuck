@@ -10,25 +10,25 @@ val get_token_index : token -> int
 
 val match_expr : char * int -> expr * int
 
-val increase : bytes -> int -> ()
+val increase : bytes -> int -> unit
 
-val decrease : bytes -> int -> ()
+val decrease : bytes -> int -> unit
 
-val print_mem : bytes -> int -> ()
+val print_mem : bytes -> int -> unit
 
-val save_char : bytes -> int -> ()
+val save_char : bytes -> int -> unit
 
-val move_ptr_right : state -> ()
+val move_ptr_right : state -> unit
 
-val move_ptr_left : state -> ()
+val move_ptr_left : state -> unit
 
 val is_mem_of_ptr_zero : state -> -> bytes -> bool
 
-val change_loop_state : state -> ()
+val change_loop_state : state -> unit
 
 val begin_loop_state : state -> state
 
-val execute_expression : state list -> bytes -> expr -> ()
+val execute_expression : state list -> bytes -> expr -> unit
 
 val statement_to_list : statement -> statement list 
 
@@ -56,7 +56,7 @@ val filter_opening_brackets : token list -> token list
 
 val filter_closing_brackets : token list -> token list
 
-val check_syntax : token list -> ()
+val check_syntax : token list -> unit
 
 val pair_loop_expressions : token list -> token list -> (token * token) list -> (token * token) list 
 
@@ -64,4 +64,4 @@ val get_matching_while_tokens : token list -> (token * token) list
 
 val list_length : 'a list -> int
 
-val interpret : state -> bytes -> statement -> ()
+val interpret : state -> bytes -> statement -> unit
